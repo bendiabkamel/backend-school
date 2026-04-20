@@ -22,6 +22,19 @@ MAX_IMAGE_SIZE = 5 * 1024 * 1024
 MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
 
 
+def _get_frontend_url(request: Optional[Request] = None) -> str:
+    configured_url = os.getenv("FRONTEND_URL", "").strip()
+    if configured_url:
+        return configured_url.rstrip("/")
+
+    if request:
+        origin = request.headers.get("origin", "").strip()
+        if origin:
+            return origin.rstrip("/")
+
+    return "https://frontend-school-alpha.vercel.app"
+
+
 @router.post("")
 @limiter.limit("5/minute")
 async def create_inscription(
@@ -138,6 +151,7 @@ async def list_inscriptions(
 async def update_inscription_status(
     inscription_id: UUID,
     update: InscriptionStatusUpdate,
+    request: Request,
     supabase: Client = Depends(get_supabase),
     current_user: dict = Depends(require_admin),
 ):
@@ -159,7 +173,11 @@ async def update_inscription_status(
 
         account_info = None
         if inscription.data:
-            account_info = await _create_student_from_inscription(supabase, inscription.data)
+            account_info = await _create_student_from_inscription(
+                supabase,
+                inscription.data,
+                _get_frontend_url(request),
+            )
 
     result = supabase.table("inscriptions").update(update_data).eq(
         "id", str(inscription_id)
@@ -181,7 +199,7 @@ async def update_inscription_status(
     return response
 
 
-async def _create_student_from_inscription(supabase: Client, inscription: dict):
+async def _create_student_from_inscription(supabase: Client, inscription: dict, frontend_url: str):
     """
     Crée automatiquement un compte auth + profil users + profil étudiant
     lors de la validation d'une inscription.
@@ -270,7 +288,6 @@ async def _create_student_from_inscription(supabase: Client, inscription: dict):
 
     # ── 5. Envoyer email de réinitialisation du mot de passe ─────────────
     # L'étudiant reçoit un lien pour définir son propre mot de passe
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
     try:
         supabase.auth.reset_password_email(
             email,
