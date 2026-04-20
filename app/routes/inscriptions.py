@@ -1,6 +1,7 @@
 """
 Routes Inscriptions — Formulaire public + Gestion admin
 """
+import os
 from typing import Optional
 from uuid import UUID
 
