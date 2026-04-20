@@ -2,6 +2,7 @@
 Routes Authentification — Supabase Auth
 """
 import os
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from supabase import Client
 
@@ -14,6 +15,14 @@ import logging
 logger = logging.getLogger("albassir_api.auth")
 
 router = APIRouter()
+
+
+def _get_frontend_url(request: Optional[Request] = None) -> str:
+    configured_url = os.getenv("FRONTEND_URL", "").strip()
+    if configured_url:
+        return configured_url.rstrip("/")
+
+    return "https://frontend-school-alpha.vercel.app"
 
 @router.post("/register")
 @limiter.limit("5/minute")
@@ -222,5 +231,10 @@ async def reset_password(
     supabase: Client = Depends(get_supabase),
 ):
     """Demande de réinitialisation de mot de passe"""
-    supabase.auth.reset_password_email(email)
+    redirect_to = f"{_get_frontend_url(request)}/update-password"
+    logger.info(f"URL de redirection reset-password: {redirect_to}")
+    supabase.auth.reset_password_email(
+        email,
+        options={"redirect_to": redirect_to},
+    )
     return {"message": "Email de réinitialisation envoyé"}

@@ -28,11 +28,6 @@ def _get_frontend_url(request: Optional[Request] = None) -> str:
     if configured_url:
         return configured_url.rstrip("/")
 
-    if request:
-        origin = request.headers.get("origin", "").strip()
-        if origin:
-            return origin.rstrip("/")
-
     return "https://frontend-school-alpha.vercel.app"
 
 
@@ -290,9 +285,11 @@ async def _create_student_from_inscription(supabase: Client, inscription: dict, 
     # ── 5. Envoyer email de réinitialisation du mot de passe ─────────────
     # L'étudiant reçoit un lien pour définir son propre mot de passe
     try:
+        redirect_to = f"{frontend_url}/update-password"
+        logger.info(f"URL de redirection inscription reset-password: {redirect_to}")
         supabase.auth.reset_password_email(
             email,
-            options={"redirect_to": f"{frontend_url}/update-password"},
+            options={"redirect_to": redirect_to},
         )
         print(f"[inscription] 📧 Email de réinitialisation envoyé à {email}")
     except Exception as e:
