@@ -86,7 +86,7 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 # ─── CORS ────────────────────────────────────────────────────
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "https://frontend-school-alpha.vercel.app").split(",")
 
 app.add_middleware(
     CORSMiddleware,
