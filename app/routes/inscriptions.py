@@ -15,6 +15,7 @@ logger = logging.getLogger("albassir_api.inscriptions")
 from app.database.connection import get_supabase
 from app.schemas.schemas import InscriptionStatusUpdate
 from app.services.auth_service import require_admin
+from app.services.password_reset_service import send_password_recovery_email
 from app.core.limiter import limiter
 
 
@@ -287,10 +288,7 @@ async def _create_student_from_inscription(supabase: Client, inscription: dict, 
     try:
         redirect_to = f"{frontend_url}/update-password"
         logger.info(f"URL de redirection inscription reset-password: {redirect_to}")
-        supabase.auth.reset_password_email(
-            email,
-            options={"redirect_to": redirect_to},
-        )
+        send_password_recovery_email(email, redirect_to)
         print(f"[inscription] 📧 Email de réinitialisation envoyé à {email}")
     except Exception as e:
         print(f"[inscription] ⚠️ Erreur envoi email à {email}: {e}")

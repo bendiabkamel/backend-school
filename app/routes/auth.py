@@ -9,6 +9,7 @@ from supabase import Client
 from app.database.connection import get_supabase
 from app.schemas.schemas import LoginRequest, RegisterRequest, TokenResponse, CreateAdminRequest
 from app.services.auth_service import get_current_user
+from app.services.password_reset_service import send_password_recovery_email
 from app.core.limiter import limiter
 
 import logging
@@ -233,8 +234,5 @@ async def reset_password(
     """Demande de réinitialisation de mot de passe"""
     redirect_to = f"{_get_frontend_url(request)}/update-password"
     logger.info(f"URL de redirection reset-password: {redirect_to}")
-    supabase.auth.reset_password_email(
-        email,
-        options={"redirect_to": redirect_to},
-    )
+    send_password_recovery_email(email, redirect_to)
     return {"message": "Email de réinitialisation envoyé"}
