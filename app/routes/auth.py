@@ -3,6 +3,7 @@ Routes Authentification — Supabase Auth
 """
 import os
 from typing import Optional
+from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Request
 from supabase import Client
 
@@ -17,13 +18,28 @@ logger = logging.getLogger("albassir_api.auth")
 
 router = APIRouter()
 
+DEFAULT_FRONTEND_URL = "https://frontend-school-alpha.vercel.app"
+LOCAL_HOSTNAMES = {"localhost", "127.0.0.1", "0.0.0.0"}
+
 
 def _get_frontend_url(request: Optional[Request] = None) -> str:
     configured_url = os.getenv("FRONTEND_URL", "").strip()
     if configured_url:
-        return configured_url.rstrip("/")
+        normalized_url = configured_url.rstrip("/")
+        parsed = urlparse(normalized_url)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            is_production = os.getenv("ENVIRONMENT", "").strip().lower() == "production"
+            if is_production and parsed.hostname in LOCAL_HOSTNAMES:
+                logger.warning(
+                    "FRONTEND_URL points to a local host in production (%s). Falling back to default URL.",
+                    normalized_url,
+                )
+            else:
+                return normalized_url
+        else:
+            logger.warning("FRONTEND_URL is invalid (%s). Falling back to default URL.", configured_url)
 
-    return "https://frontend-school-alpha.vercel.app"
+    return DEFAULT_FRONTEND_URL
 
 @router.post("/register")
 @limiter.limit("5/minute")

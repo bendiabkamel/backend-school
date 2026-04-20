@@ -1,10 +1,29 @@
 import os
 import logging
+from urllib.parse import urlparse
 
 import httpx
 
 
 logger = logging.getLogger("albassir_api.password_reset")
+
+LOCAL_HOSTNAMES = {"localhost", "127.0.0.1", "0.0.0.0"}
+
+
+def _validate_redirect_to(redirect_to: str) -> str:
+    normalized_redirect = (redirect_to or "").strip()
+    parsed = urlparse(normalized_redirect)
+
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError(f"Invalid redirect_to URL: {normalized_redirect}")
+
+    is_production = os.getenv("ENVIRONMENT", "").strip().lower() == "production"
+    if is_production and parsed.hostname in LOCAL_HOSTNAMES:
+        raise RuntimeError(
+            f"Invalid redirect_to URL for production (local host not allowed): {normalized_redirect}"
+        )
+
+    return normalized_redirect
 
 
 def send_password_recovery_email(email: str, redirect_to: str) -> None:
@@ -20,7 +39,9 @@ def send_password_recovery_email(email: str, redirect_to: str) -> None:
     if not api_key:
         raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY is not configured")
 
-    logger.info("Sending recovery email to %s using %s key with redirect_to=%s", email, key_source, redirect_to)
+    safe_redirect_to = _validate_redirect_to(redirect_to)
+
+    logger.info("Sending recovery email to %s using %s key with redirect_to=%s", email, key_source, safe_redirect_to)
 
     response = httpx.post(
         f"{supabase_url}/auth/v1/recover",
@@ -29,8 +50,8 @@ def send_password_recovery_email(email: str, redirect_to: str) -> None:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        params={"redirect_to": redirect_to},
-        json={"email": email},
+        params={"redirect_to": safe_redirect_to},
+        json={"email": email, "redirect_to": safe_redirect_to},
         timeout=20.0,
     )
 

@@ -3,6 +3,7 @@ Routes Inscriptions — Formulaire public + Gestion admin
 """
 import os
 from typing import Optional
+from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
@@ -22,14 +23,28 @@ from app.core.limiter import limiter
 router = APIRouter()
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
 MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
+DEFAULT_FRONTEND_URL = "https://frontend-school-alpha.vercel.app"
+LOCAL_HOSTNAMES = {"localhost", "127.0.0.1", "0.0.0.0"}
 
 
 def _get_frontend_url(request: Optional[Request] = None) -> str:
     configured_url = os.getenv("FRONTEND_URL", "").strip()
     if configured_url:
-        return configured_url.rstrip("/")
+        normalized_url = configured_url.rstrip("/")
+        parsed = urlparse(normalized_url)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            is_production = os.getenv("ENVIRONMENT", "").strip().lower() == "production"
+            if is_production and parsed.hostname in LOCAL_HOSTNAMES:
+                logger.warning(
+                    "FRONTEND_URL points to a local host in production (%s). Falling back to default URL.",
+                    normalized_url,
+                )
+            else:
+                return normalized_url
+        else:
+            logger.warning("FRONTEND_URL is invalid (%s). Falling back to default URL.", configured_url)
 
-    return "https://frontend-school-alpha.vercel.app"
+    return DEFAULT_FRONTEND_URL
 
 
 @router.post("")
