@@ -1,4 +1,7 @@
 """Routes Paiements"""
+import logging
+
+logger = logging.getLogger("albassir_api.paiements")
 import csv
 import io
 from calendar import monthrange
@@ -121,19 +124,24 @@ def _fetch_payments_with_filters(
     mois: Optional[int],
     annee: Optional[int],
 ) -> list[dict]:
-    query = supabase.table("paiements").select(
-        "*, students(id, nom, prenom, email, numero_etudiant), formations(id, titre)"
-    )
+    try:
+        query = supabase.table("paiements").select(
+            "*, students(id, nom, prenom, email, numero_etudiant), formations(id, titre)"
+        )
 
-    if formation_id:
-        query = query.eq("formation_id", str(formation_id))
+        if formation_id:
+            query = query.eq("formation_id", str(formation_id))
 
-    start_date, end_date = _build_date_range(mois, annee)
-    if start_date and end_date:
-        query = query.gte("date_paiement", start_date).lte("date_paiement", end_date)
+        start_date, end_date = _build_date_range(mois, annee)
+        if start_date and end_date:
+            query = query.gte("date_paiement", start_date).lte("date_paiement", end_date)
 
-    result = query.order("date_paiement", desc=True).execute()
-    return result.data or []
+        result = query.order("date_paiement", desc=True).execute()
+        return result.data or []
+    except Exception as e:
+        print(f"[PAIEMENTS ERROR] {type(e).__name__}: {e}")
+        logger.error(f"[PAIEMENTS ERROR] {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("")
@@ -191,7 +199,13 @@ async def list_paiements(
     if statut and statut not in {"solde", "partiel", "impaye"}:
         raise HTTPException(status_code=400, detail="statut invalide (solde|partiel|impaye)")
 
-    rows = _fetch_payments_with_filters(supabase, formation_id, mois, annee)
+    try:
+        rows = _fetch_payments_with_filters(supabase, formation_id, mois, annee)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[PAIEMENTS ERROR] {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     aggregated = _aggregate_by_student_formation(rows)
 
     if statut:

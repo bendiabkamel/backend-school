@@ -144,6 +144,16 @@ class StudentStatusUpdate(BaseModel):
     statut: str = Field(pattern="^(Actif|Inactif|Suspendu)$")
 
 
+class CreateStudentDirectRequest(BaseModel):
+    nom: str = Field(min_length=1, max_length=100)
+    prenom: str = Field(min_length=1, max_length=100)
+    email: EmailStr
+    telephone: str = Field(default="", max_length=20)
+    wilaya: Optional[str] = None
+    niveau_etudes: Optional[str] = None
+    formation_id: Optional[UUID] = None
+
+
 class InscriptionResponse(BaseModel):
     id: UUID
     nom: Optional[str]

@@ -15,6 +15,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+print("[DB] Supabase client initialized")
 
 # ─── SQLALCHEMY ASYNC ─────────────────────────────────────────
 # IMPORTANT : utiliser le Session Pooler Supabase (IPv4, port 5432) dans DATABASE_URL.
@@ -68,6 +69,12 @@ async def init_db():
         # et n'est jamais appelée par les routes en production.
         supabase.table("formations").select("id", count="exact").limit(0).execute()
         print("[init_db] Connexion Supabase OK")
+        # Test table paiements
+        try:
+            paiements_test = supabase.table("paiements").select("id").limit(1).execute()
+            print(f"[PAIEMENTS TEST] Table accessible — {len(paiements_test.data or [])} row(s) in sample")
+        except Exception as exc_p:
+            print(f"[PAIEMENTS TEST] ERREUR acces table paiements: {exc_p}")
     except Exception as exc:
         print("[init_db] ERREUR: Impossible de joindre Supabase")
         print("[init_db] Vérifiez SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY dans .env")
