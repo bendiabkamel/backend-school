@@ -114,28 +114,28 @@ async def create_lesson(
     data = lesson.model_dump()
     data["module_id"] = str(data["module_id"])
     result = supabase.table("lessons").insert(data).execute()
-
-
-    @router.get("/lessons/{lesson_id}")
-    async def get_lesson(
-        lesson_id: UUID,
-        supabase: Client = Depends(get_supabase),
-        current_user: dict = Depends(get_current_user),
-    ):
-        """Récupère une leçon avec ses vidéos, documents et module parent"""
-        result = supabase.table("lessons").select(
-            "*, videos(*), documents(*), elearning_modules(id, titre, formation_id)"
-        ).eq("id", str(lesson_id)).single().execute()
-
-        if not result.data:
-            raise HTTPException(status_code=404, detail="Leçon introuvable")
-
-        lesson = result.data
-        if not lesson.get("is_published") and current_user.get("role") not in ("admin", "formateur"):
-            raise HTTPException(status_code=403, detail="Leçon non publiée")
-
-        return lesson
     return result.data[0]
+
+
+@router.get("/lessons/{lesson_id}")
+async def get_lesson(
+    lesson_id: UUID,
+    supabase: Client = Depends(get_supabase),
+    current_user: dict = Depends(get_current_user),
+):
+    """Récupère une leçon avec ses vidéos, documents et module parent"""
+    result = supabase.table("lessons").select(
+        "*, videos(*), documents(*), elearning_modules(id, titre, formation_id)"
+    ).eq("id", str(lesson_id)).single().execute()
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Leçon introuvable")
+
+    lesson = result.data
+    if not lesson.get("is_published") and current_user.get("role") not in ("admin", "formateur"):
+        raise HTTPException(status_code=403, detail="Leçon non publiée")
+
+    return lesson
 
 
 @router.post("/lessons/{lesson_id}/video")

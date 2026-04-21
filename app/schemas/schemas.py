@@ -2,7 +2,7 @@
 Schémas Pydantic — Validation des données
 """
 from datetime import datetime, date
-from typing import Optional, List
+from typing import Optional, List, Literal
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, validator
 
@@ -191,12 +191,14 @@ class AttendanceCreate(BaseModel):
 
 class AttendanceRecord(BaseModel):
     student_id: UUID
-    statut: str = Field(pattern="^(Présent|Absent|Retard|Excusé)$")
+    session_id: Optional[UUID] = None
+    date_seance: Optional[date] = None
+    statut: str = Field(default="Absent", pattern="^(Présent|Absent|Retard|Excusé)$")
 
 
 class AttendanceBulkCreate(BaseModel):
-    session_id: UUID
-    date_seance: date
+    session_id: Optional[UUID] = None
+    date_seance: Optional[date] = None
     records: List[AttendanceRecord]
 
 
@@ -288,8 +290,7 @@ class QuizResultResponse(BaseModel):
 
 # ─── PROGRESSION ─────────────────────────────────────────────
 
-class ProgressUpdate(BaseModel):
-    student_id: UUID
+class ProgressCompleteRequest(BaseModel):
     formation_id: UUID
     lesson_id: UUID
     completed: bool = True
@@ -301,3 +302,40 @@ class ProgressResponse(BaseModel):
     modules: List[dict]
     lessons_completed: int
     lessons_total: int
+
+
+# ─── PAIEMENTS ──────────────────────────────────────────────
+
+class PaiementCreate(BaseModel):
+    student_id: UUID
+    formation_id: UUID
+    montant_verse: float = Field(gt=0)
+    mode_paiement: Literal["especes", "virement", "cheque", "ccp"]
+    reference_recu: Optional[str] = Field(default=None, max_length=100)
+    notes: Optional[str] = None
+    date_paiement: Optional[date] = None
+
+
+class PaiementResponse(BaseModel):
+    id: UUID
+    student_id: UUID
+    formation_id: UUID
+    montant_du: float
+    montant_verse: float
+    mode_paiement: str
+    reference_recu: Optional[str] = None
+    notes: Optional[str] = None
+    date_paiement: date
+    created_by: Optional[UUID] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PaiementSummaryResponse(BaseModel):
+    total_encaisse_mois_courant: float
+    total_en_attente: float
+    taux_recouvrement: float
+    nb_etudiants_solde: int
+    nb_etudiants_impaye: int

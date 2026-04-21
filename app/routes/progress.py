@@ -3,21 +3,27 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from supabase import Client
 from app.database.connection import get_supabase
-from app.schemas.schemas import ProgressUpdate
-from app.services.auth_service import get_current_user
+from app.schemas.schemas import ProgressCompleteRequest
+from app.services.auth_service import get_current_user, verify_student_ownership
 
 router = APIRouter()
 
 
 @router.post("/lesson/complete")
 async def mark_lesson_complete(
-    data: ProgressUpdate,
+    data: ProgressCompleteRequest,
     supabase: Client = Depends(get_supabase),
     current_user: dict = Depends(get_current_user),
 ):
     """Marquer une leçon comme complétée"""
+    student = supabase.table("students").select("id").eq("user_id", current_user["id"]).single().execute()
+    if not student.data:
+        raise HTTPException(status_code=403, detail="Aucun profil étudiant associé à cet utilisateur")
+
+    student_id = student.data["id"]
+
     progress_data = {
-        "student_id": str(data.student_id),
+        "student_id": str(student_id),
         "formation_id": str(data.formation_id),
         "lesson_id": str(data.lesson_id),
         "completed": data.completed,
@@ -30,7 +36,7 @@ async def mark_lesson_complete(
 
     # Recalculer la progression globale
     updated = await _recalculate_progress(
-        supabase, str(data.student_id), str(data.formation_id)
+        supabase, str(student_id), str(data.formation_id)
     )
 
     return {"message": "Progression mise à jour", "pourcentage": updated}
@@ -81,6 +87,8 @@ async def get_formation_progress(
     current_user: dict = Depends(get_current_user),
 ):
     """Progression détaillée d'un étudiant pour une formation"""
+    await verify_student_ownership(current_user, str(student_id), supabase)
+
     progress = supabase.table("progress").select("*").eq(
         "student_id", str(student_id)
     ).eq("formation_id", str(formation_id)).execute()

@@ -16,7 +16,6 @@ logger = logging.getLogger("albassir_api.inscriptions")
 from app.database.connection import get_supabase
 from app.schemas.schemas import InscriptionStatusUpdate
 from app.services.auth_service import require_admin
-from app.services.password_reset_service import send_password_recovery_email
 from app.core.limiter import limiter
 
 
@@ -45,6 +44,27 @@ def _get_frontend_url(request: Optional[Request] = None) -> str:
             logger.warning("FRONTEND_URL is invalid (%s). Falling back to default URL.", configured_url)
 
     return DEFAULT_FRONTEND_URL
+
+
+def _extract_documents_storage_path(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+
+    cleaned = value.strip()
+    parsed = urlparse(cleaned)
+
+    if not parsed.scheme:
+        return cleaned.lstrip("/")
+
+    markers = [
+        "/storage/v1/object/public/documents/",
+        "/storage/v1/object/sign/documents/",
+    ]
+    for marker in markers:
+        if marker in parsed.path:
+            return parsed.path.split(marker, 1)[1].lstrip("/")
+
+    return None
 
 
 @router.post("")
@@ -82,8 +102,8 @@ async def create_inscription(
             detail="Une inscription en attente existe déjà pour cette formation avec cet email"
         )
 
-    photo_url = None
-    carte_url = None
+    photo_path = None
+    carte_path = None
 
     # Upload photo personnelle
     if photo and photo.filename:
@@ -94,10 +114,10 @@ async def create_inscription(
             raise HTTPException(status_code=400, detail="La photo dépasse la taille maximale de 5 Mo")
         path = f"inscriptions/{email}/photo_{photo.filename}"
         supabase.storage.from_("documents").upload(path, contents, {
-    "content-type": photo.content_type,
-    "upsert": "true"  # 
-})
-        photo_url = supabase.storage.from_("documents").get_public_url(path)
+            "content-type": photo.content_type,
+            "upsert": "true"
+        })
+        photo_path = path
 
     # Upload carte nationale
     if carte_nationale and carte_nationale.filename:
@@ -112,7 +132,7 @@ async def create_inscription(
             "content-type": carte_nationale.content_type,
             "upsert": "true"
         })
-        carte_url = supabase.storage.from_("documents").get_public_url(path)
+        carte_path = path
 
     # Créer l'inscription
     inscription_data = {
@@ -122,8 +142,8 @@ async def create_inscription(
         "telephone": telephone,
         "formation_id": formation_id,
         "session_id": session_id,
-        "photo_url": photo_url,
-        "carte_nationale_url": carte_url,
+        "photo_url": photo_path,
+        "carte_nationale_url": carte_path,
         "statut": "En attente",
     }
 
@@ -159,6 +179,47 @@ async def list_inscriptions(
     return result.data or []
 
 
+@router.get("/{inscription_id}/document/{doc_type}")
+async def get_inscription_document_signed_url(
+    inscription_id: UUID,
+    doc_type: str,
+    supabase: Client = Depends(get_supabase),
+    _: dict = Depends(require_admin),
+):
+    """Génère une URL signée temporaire (1h) pour un document d'inscription."""
+    normalized_doc_type = doc_type.strip().lower()
+    allowed_doc_types = {"photo": "photo_url", "carte_nationale": "carte_nationale_url"}
+
+    if normalized_doc_type not in allowed_doc_types:
+        raise HTTPException(status_code=400, detail="doc_type invalide (photo|carte_nationale)")
+
+    inscription = supabase.table("inscriptions").select(
+        "id, photo_url, carte_nationale_url"
+    ).eq("id", str(inscription_id)).single().execute()
+
+    if not inscription.data:
+        raise HTTPException(status_code=404, detail="Inscription introuvable")
+
+    raw_path = inscription.data.get(allowed_doc_types[normalized_doc_type])
+    storage_path = _extract_documents_storage_path(raw_path)
+
+    if not storage_path:
+        raise HTTPException(status_code=404, detail="Document introuvable")
+
+    signed_payload = supabase.storage.from_("documents").create_signed_url(storage_path, 3600)
+    signed_url = signed_payload.get("signedURL") if isinstance(signed_payload, dict) else None
+
+    if not signed_url:
+        raise HTTPException(status_code=500, detail="Impossible de générer l'URL signée")
+
+    return {
+        "inscription_id": str(inscription_id),
+        "doc_type": normalized_doc_type,
+        "expires_in": 3600,
+        "signed_url": signed_url,
+    }
+
+
 @router.put("/{inscription_id}/status")
 async def update_inscription_status(
     inscription_id: UUID,
@@ -189,6 +250,7 @@ async def update_inscription_status(
                 supabase,
                 inscription.data,
                 _get_frontend_url(request),
+                str(inscription_id),
             )
 
     result = supabase.table("inscriptions").update(update_data).eq(
@@ -205,21 +267,23 @@ async def update_inscription_status(
         response["compte_etudiant"] = {
             "cree": account_info.get("account_created", False),
             "email": result.data[0].get("email"),
-            "mot_de_passe_temporaire": account_info.get("temp_password"),
             "info": "Un email de réinitialisation du mot de passe a été envoyé à l'étudiant.",
         }
     return response
 
 
-async def _create_student_from_inscription(supabase: Client, inscription: dict, frontend_url: str):
+async def _create_student_from_inscription(
+    supabase: Client,
+    inscription: dict,
+    frontend_url: str,
+    inscription_id: str,
+):
     """
     Crée automatiquement un compte auth + profil users + profil étudiant
     lors de la validation d'une inscription.
     Retourne un dict avec les infos du compte créé.
     """
     import os
-    import secrets
-
     email = inscription["email"]
     nom = inscription.get("nom", "")
     prenom = inscription.get("prenom", "")
@@ -233,14 +297,11 @@ async def _create_student_from_inscription(supabase: Client, inscription: dict, 
         return existing.data[0]
 
     # ── 1. Créer le compte Supabase Auth (auth.users) ─────────────────────
-    # Mot de passe temporaire — l'étudiant devra le changer via le lien envoyé
-    temp_password = secrets.token_urlsafe(12)
     user_id = None
 
     try:
         auth_response = supabase.auth.admin.create_user({
             "email": email,
-            "password": temp_password,
             "email_confirm": True,          # Email confirmé immédiatement
             "user_metadata": {"full_name": full_name},
         })
@@ -298,20 +359,16 @@ async def _create_student_from_inscription(supabase: Client, inscription: dict, 
     result = supabase.table("students").insert(student_data).execute()
     print(f"[inscription] ✅ Profil étudiant créé : {numero}")
 
-    # ── 5. Envoyer email de réinitialisation du mot de passe ─────────────
-    # L'étudiant reçoit un lien pour définir son propre mot de passe
+    # ── 5. Déclencher l'email Supabase de reset mot de passe ──────────────
     try:
         redirect_to = f"{frontend_url}/update-password"
         logger.info(f"URL de redirection inscription reset-password: {redirect_to}")
-        send_password_recovery_email(email, redirect_to)
-        print(f"[inscription] 📧 Email de réinitialisation envoyé à {email}")
-    except Exception as e:
-        print(f"[inscription] ⚠️ Erreur envoi email à {email}: {e}")
-        print(f"[inscription] 🔑 IMPORTANT : Mot de passe temporaire pour {email} : {temp_password}")
+        supabase.auth.reset_password_for_email(email, {"redirect_to": redirect_to})
+    except Exception:
+        logger.error("Échec envoi email reset pour inscription %s", inscription_id)
 
     return {
         "student": result.data[0] if result.data else None,
         "user_id": user_id,
-        "temp_password": temp_password,   # À transmettre à l'étudiant si l'email échoue
         "account_created": user_id is not None,
     }

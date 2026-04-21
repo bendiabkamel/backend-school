@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from supabase import Client
 from app.database.connection import get_supabase
 from app.schemas.schemas import StudentStatusUpdate
-from app.services.auth_service import get_current_user, require_admin
+from app.services.auth_service import get_current_user, require_admin, verify_student_ownership
 
 import logging
 
@@ -94,6 +94,7 @@ async def get_student(
     supabase: Client = Depends(get_supabase),
     current_user: dict = Depends(get_current_user),
 ):
+    await verify_student_ownership(current_user, str(student_id), supabase)
     result = supabase.table("students").select("*").eq("id", str(student_id)).single().execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Étudiant introuvable")
@@ -107,6 +108,8 @@ async def get_student_formations(
     current_user: dict = Depends(get_current_user),
 ):
     """Formations d'un étudiant avec progression"""
+    await verify_student_ownership(current_user, str(student_id), supabase)
+
     inscriptions = supabase.table("inscriptions").select(
         "*, formations(*, categories(name, color))"
     ).eq("student_id", str(student_id)).eq("statut", "Validé").execute()

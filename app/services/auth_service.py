@@ -108,3 +108,21 @@ async def require_formateur_or_admin(
     if current_user.get("role") not in ("admin", "formateur"):
         raise HTTPException(status_code=403, detail="Accès non autorisé")
     return current_user
+
+
+async def verify_student_ownership(current_user, student_id: str, supabase: Client) -> bool:
+    """Vérifie que current_user est soit admin/formateur, soit l'étudiant lui-même."""
+    role = current_user.get("role") if isinstance(current_user, dict) else getattr(current_user, "role", None)
+    user_id = current_user.get("id") if isinstance(current_user, dict) else getattr(current_user, "id", None)
+
+    if role in ("admin", "formateur"):
+        return True
+
+    if not user_id:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
+
+    student = supabase.table("students").select("id").eq("user_id", user_id).single().execute()
+    if not student.data or student.data["id"] != student_id:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
+
+    return True
