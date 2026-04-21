@@ -43,7 +43,7 @@ class CategoryBase(BaseModel):
 
 
 class CategoryCreate(CategoryBase):
-    pass
+    slug: Optional[str] = None
 
 
 class CategoryResponse(CategoryBase):

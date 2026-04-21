@@ -147,16 +147,32 @@ async def upload_formation_image(
     _: dict = Depends(require_admin),
 ):
     """Upload image de formation dans Supabase Storage"""
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Fichier image requis")
+    ALLOWED_TYPES = {
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+    }
+
+    if file.content_type not in ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Format non supporté. Utilisez jpg, png ou webp.",
+        )
 
     contents = await file.read()
     if len(contents) > MAX_IMAGE_SIZE:
         raise HTTPException(status_code=400, detail="Image trop volumineuse (max 5 Mo)")
-    path = f"formations/{formation_id}/{file.filename}"
+
+    existing = supabase.table("formations").select("id").eq("id", str(formation_id)).execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Formation introuvable")
+
+    ext = ALLOWED_TYPES[file.content_type]
+    path = f"formations/{formation_id}/cover.{ext}"
 
     supabase.storage.from_("formations").upload(path, contents, {
-        "content-type": file.content_type
+        "content-type": file.content_type,
+        "upsert": "true",
     })
 
     public_url = supabase.storage.from_("formations").get_public_url(path)
