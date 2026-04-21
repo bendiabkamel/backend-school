@@ -1,5 +1,6 @@
 """Routes Sessions"""
 from uuid import UUID
+import logging
 from fastapi import APIRouter, Depends
 from supabase import Client
 from app.database.connection import get_supabase
@@ -7,15 +8,21 @@ from app.schemas.schemas import SessionCreate
 from app.services.auth_service import require_admin
 
 router = APIRouter()
+logger = logging.getLogger("albassir_api.sessions")
 
 
 @router.get("")
 async def list_sessions(formation_id: str = None, supabase: Client = Depends(get_supabase)):
-    query = supabase.table("sessions").select("*, formations(titre)")
-    if formation_id:
-        query = query.eq("formation_id", formation_id)
-    result = query.order("date_debut").execute()
-    return result.data or []
+    try:
+        query = supabase.table("sessions").select("*, formations(titre)")
+        normalized_formation_id = (formation_id or "").strip().lower()
+        if normalized_formation_id and normalized_formation_id not in {"all", "null", "undefined"}:
+            query = query.eq("formation_id", formation_id)
+        result = query.order("date_debut").execute()
+        return result.data or []
+    except Exception as exc:
+        logger.warning("[sessions] list_sessions failed, returning empty list: %s", exc)
+        return []
 
 
 @router.post("")

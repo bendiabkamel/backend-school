@@ -34,7 +34,7 @@ logger = logging.getLogger("albassir_api")
 from app.routes import (
     auth, formations, categories, sessions,
     inscriptions, students, attendance,
-    elearning, quiz, exams, progress, paiements
+    elearning, quiz, exams, progress, paiements, admin
 )
 from app.database.connection import init_db
 from app.core.limiter import limiter
@@ -109,6 +109,7 @@ app.include_router(quiz.router,        prefix="/quiz",        tags=["Quiz"])
 app.include_router(exams.router,       prefix="/exams",       tags=["Examens"])
 app.include_router(progress.router,    prefix="/progress",    tags=["Progression"])
 app.include_router(paiements.router,   prefix="/paiements",   tags=["Paiements"])
+app.include_router(admin.router,       prefix="/admin",       tags=["Admin"])
 
 
 @app.get("/", tags=["Health"])
