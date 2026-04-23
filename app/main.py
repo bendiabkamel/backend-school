@@ -32,9 +32,26 @@ logging.basicConfig(
 logger = logging.getLogger("albassir_api")
 
 from app.routes import (
-    auth, formations, categories, sessions,
-    inscriptions, students, attendance,
-    elearning, quiz, exams, progress, paiements, admin
+    auth,
+    formations,
+    categories,
+    sessions,
+    inscriptions,
+    students,
+    attendance,
+    elearning,
+    quiz,
+    exams,
+    progress,
+    paiements,
+    admin,
+    academic_sessions,
+    academic_structure,
+    attendance_v2,
+    grading,
+    assignments_v2,
+    communications,
+    promotions,
 )
 from app.database.connection import init_db
 from app.core.limiter import limiter
@@ -110,6 +127,13 @@ app.include_router(exams.router,       prefix="/exams",       tags=["Examens"])
 app.include_router(progress.router,    prefix="/progress",    tags=["Progression"])
 app.include_router(paiements.router,   prefix="/paiements",   tags=["Paiements"])
 app.include_router(admin.router,       prefix="/admin",       tags=["Admin"])
+app.include_router(academic_sessions.router, prefix="/school-sessions", tags=["School Sessions"])
+app.include_router(academic_structure.router, prefix="/school-structure", tags=["School Structure"])
+app.include_router(attendance_v2.router, prefix="/attendance-v2", tags=["Attendance V2"])
+app.include_router(grading.router, prefix="/grading", tags=["Grading"])
+app.include_router(assignments_v2.router, prefix="/assignments", tags=["Assignments"])
+app.include_router(communications.router, prefix="/communications", tags=["Communications"])
+app.include_router(promotions.router, prefix="/promotions", tags=["Promotions"])
 
 
 @app.get("/", tags=["Health"])

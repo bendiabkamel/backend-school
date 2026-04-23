@@ -53,3 +53,5 @@ media/
 logs/
 
 .env 
+
+__pycache__
