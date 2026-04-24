@@ -514,6 +514,40 @@ class RoutineBulkCreate(Phase3BaseSchema):
     routines: list[RoutineCreate] = Field(min_length=1)
 
 
+class RoutineUpdate(Phase3BaseSchema):
+    weekday: int | None = Field(default=None, ge=1, le=7)
+    start_time: time | None = None
+    end_time: time | None = None
+    room_no: str | None = Field(default=None, max_length=60)
+    is_recurring: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_time(self) -> "RoutineUpdate":
+        if self.start_time and self.end_time and self.end_time <= self.start_time:
+            raise ValueError("end_time must be greater than start_time")
+        return self
+
+
+# Teachers ─────────────────────────────────────────────────────────────────────
+
+
+class TeacherCreate(Phase3BaseSchema):
+    email: str = Field(min_length=1, max_length=200)
+    full_name: str = Field(min_length=1, max_length=200)
+    phone: str | None = Field(default=None, max_length=60)
+    photo_url: str | None = Field(default=None, max_length=500)
+    bio: str | None = None
+    is_active: bool = True
+
+
+class TeacherUpdate(Phase3BaseSchema):
+    full_name: str | None = Field(default=None, min_length=1, max_length=200)
+    phone: str | None = Field(default=None, max_length=60)
+    photo_url: str | None = Field(default=None, max_length=500)
+    bio: str | None = None
+    is_active: bool | None = None
+
+
 # M7 ───────────────────────────────────────────────────────────────────────────
 
 

@@ -52,6 +52,8 @@ from app.routes import (
     assignments_v2,
     communications,
     promotions,
+    teachers,
+    routines,
 )
 from app.database.connection import init_db
 from app.core.limiter import limiter
@@ -134,6 +136,8 @@ app.include_router(grading.router, prefix="/grading", tags=["Grading"])
 app.include_router(assignments_v2.router, prefix="/assignments", tags=["Assignments"])
 app.include_router(communications.router, prefix="/communications", tags=["Communications"])
 app.include_router(promotions.router, prefix="/promotions", tags=["Promotions"])
+app.include_router(teachers.router,   prefix="/teachers",   tags=["Teachers"])
+app.include_router(routines.router,   prefix="/routines",   tags=["Routines"])
 
 
 @app.get("/", tags=["Health"])
